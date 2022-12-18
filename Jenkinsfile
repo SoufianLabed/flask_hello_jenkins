@@ -1,33 +1,44 @@
 pipeline {
-	agent {
-		kubernetes {
-			// this label will be the prefix of the generated pod's name
-			label 'jenkins-agent-my-app'
-			yaml """
-apiVersion: v1
-kind: Pod
-metadata:
-	labels:
-	component: ci
-spec:
-	containers:
-		- name: python
-		image: python:3.7
-		command:
-			- cat
-		tty: true
-"""
-	}
- }
- stages {
-	stage('Test python') {
-		steps {
-			container('python') {
-				sh "pip install -r requirements.txt"
-				sh "python test.py"
-			}
-		}
-	}
-	}
-}
+    agent any
 
+    stages {
+        stage('git checkout') {
+            steps {
+                git credentialsId: 'a11c9e21-3ede-4558-9bdf-e09f7da4d2be', url: 'https://github.com/SoufianLabed/java-docker'
+            }
+        }
+        
+         stage('Build the application') {
+            steps {
+                sh 'mvn clean install'
+            }
+        }
+        stage('Unit Test Execution') { 
+            steps{
+                sh 'mvn test'
+            }
+        }
+        stage('Build the docker image') { 
+            steps{
+                sh "docker build -t skyzyn/jenkins_triangle:1.0.0"
+            }
+        }
+        
+        stage('Push the docker image') {
+            steps{
+                withCredentials([string(credentialsId: 'dockerhubpass', variable: 'test')]) {
+                    sh "docker login -u skyzyn -p $test  docker.io"
+                }
+                sh 'docker push skyzyn/jenkins_triangle:1.0.0'
+            } 
+        }        
+    }
+    post{
+        failure{
+            emailext body: 'Ce Build $BUILD_NUMBER a échoué',
+                recipientProviders: [requestor()], 
+                subject: 'build', 
+                to: 'labedsoufian@gmail.com'
+        } 
+    }
+}
